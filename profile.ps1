@@ -2,56 +2,62 @@ Set-PSReadlineOption -PredictionViewStyle ListView -PredictionSource HistoryAndP
 Import-Module posh-git
 
 function Invoke-CustomizeConsole {
-  $hostVersion="$($Host.Version.Major)`.$($Host.Version.Minor)`.$($Host.Version.Build)"
+  $hostVersion="$($Host.Version.Major).$($Host.Version.Minor).$($Host.Version.Build)"
   $Host.UI.RawUI.WindowTitle = "PowerShell $hostVersion"
 }
 Invoke-CustomizeConsole
 
-function prompt {  
+# Cache admin status to avoid repeated checks
+$script:isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+function prompt {
+#region Timestamp
   # Write the time 
   Write-Host '[' -NoNewline
-  Write-Host (Get-Date -Format "HH:mm") -fore yellow -NoNewline
+  Write-Host (Get-Date -Format "HH:mm") -ForegroundColor Yellow -NoNewline
   Write-Host '] ' -NoNewline
+#endregion
 
+#region Admin Indicator
+  if ($script:isAdmin) {
+    Write-Host '⚡ ' -ForegroundColor Red -NoNewline
+  }
+#endregion
+
+#region Git Indicators
   # Show the git branch if in a git repo
-  $gitStatus = ( git status -b --porcelain=v1 | Select-Object -First 1 ) 2>$null
+  $gitStatus = (git status -b --porcelain=v1 2>$null | Select-Object -First 1)
     
-  Write-Host $gitBranch -fore cyan -NoNewline
   # Parse the branch line (starts with ##)
   if ($gitStatus -match '^## (.+?)(?:\.\.\.(.+?))?(?: \[(.+)\])?$') {
     $branchName = $matches[1]
     $trackingInfo = $matches[3]
     
-    # Initialize variables
-    $ahead = 0
-    $behind = 0
+    Write-Host '(' -NoNewline
+    Write-Host $branchName -ForegroundColor Cyan -NoNewline
     
     # Parse tracking information if it exists
     if ($trackingInfo) {
         # Look for "ahead X" pattern
         if ($trackingInfo -match 'ahead (\d+)') {
-            $ahead = [int]$matches[1]
+            Write-Host " ↑$($matches[1])" -ForegroundColor Magenta -NoNewline
         }
         # Look for "behind X" pattern  
         if ($trackingInfo -match 'behind (\d+)') {
-            $behind = [int]$matches[1]
+            Write-Host " ↓$($matches[1])" -ForegroundColor Blue -NoNewline
         }
     }
-    Write-Host '(' -NoNewline
-    Write-Host "$branchName" -fore Cyan -NoNewline
-    if ($ahead) {
-      Write-Host " ↑$ahead" -fore magenta -NoNewline
-    }
-    if ($behind) {
-      Write-Host " ↓$behind" -fore blue -NoNewline
-    }
     Write-Host ') ' -NoNewline
-  }#endregion
+  }
+#endregion
   
+#region Working Directory
   # Write the path
-  Write-Host $(Get-Location).Path.replace($home, '~') -fore green -NoNewline
-  Write-Host $(if ($nestedpromptlevel -ge 1) {
-      '>>' 
-    }) -NoNewline
+  Write-Host (Get-Location).Path.Replace($HOME, '~') -ForegroundColor Green -NoNewline
+#endregion
+
+  if ($nestedpromptlevel -ge 1) {
+      Write-Host '>>' -NoNewline
+  }
   return '> '
 }
